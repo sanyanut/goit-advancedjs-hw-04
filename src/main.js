@@ -19,8 +19,8 @@ let simpleLightbox = new SimpleLightbox('.gallery-item-link', {
 });
 
 let currentPage = 1;
-let limit = 15;
-let formInputValue = '';
+const limit = 15;
+let currentInputValue = '';
 
 const smoothScroll = () => {
   const { height: cardHeight } =
@@ -31,64 +31,37 @@ const smoothScroll = () => {
   });
 };
 
-const onLoadMoreBtnClick = async e => {
-  try {
-    refs.loadMore.classList.add('hidden');
-    refs.loader.classList.remove('hidden');
-
-    currentPage++;
-    const data = await fetchImages(formInputValue, currentPage, limit);
-    const totalPages = Math.ceil(data.totalHits / limit);
-
-    if (data.hits.length === 0) {
-      refs.loadMore.classList.add('hidden');
-      return;
-    }
-    const dataTemplate = renderImages(data.hits);
-    refs.gallery.insertAdjacentHTML('beforeend', dataTemplate);
-
-    refs.loadMore.classList.remove('hidden');
-    refs.loader.classList.add('hidden');
-    smoothScroll();
-    simpleLightbox.refresh();
-    if (currentPage >= totalPages) {
-      refs.loader.classList.add('hidden');
-      refs.loadMore.classList.add('hidden');
-      iziToast.info({
-        position: 'topRight',
-        message: "We're sorry, but you've reached the end of search results.",
-      });
-      return;
-    }
-  } catch (error) {
-    console.log(error);
-  }
+const toggleLoader = (show = false) => {
+  refs.loader.classList.toggle('hidden', !show);
 };
 
-refs.form.addEventListener('submit', async e => {
-  e.preventDefault();
+const toggleLoadMoreBtn = (show = false) => {
+  refs.loadMore.classList.toggle('hidden', !show);
+};
 
+const onFormSubmit = async event => {
+  event.preventDefault();
+  const form = event.currentTarget;
   const inputValue = refs.formInput.value.trim();
-  formInputValue = inputValue;
 
   if (inputValue === '') {
     iziToast.error({
       message: 'Please enter a search term.',
       position: 'topRight',
-      closeOnClick: true,
     });
     return;
   }
 
+  currentPage = 1;
+  currentInputValue = inputValue;
   refs.gallery.innerHTML = '';
-  refs.gallery.classList.add('hidden');
-  refs.loader.classList.remove('hidden');
+
+  toggleLoadMoreBtn(false);
+  toggleLoader(true);
 
   try {
-    const data = await fetchImages(inputValue, currentPage);
-    const totalPages = Math.ceil(data.totalHits / 50);
-    refs.formInput.value = '';
-    refs.loadMore.classList.add('hidden');
+    const data = await fetchImages(currentInputValue, currentPage, limit);
+    const totalPages = Math.ceil(data.totalHits / limit);
 
     if (data.hits.length === 0) {
       iziToast.error({
@@ -96,27 +69,22 @@ refs.form.addEventListener('submit', async e => {
         position: 'topRight',
         closeOnClick: true,
       });
-      refs.loader.classList.add('hidden');
-      refs.loadMore.classList.add('hidden');
-      refs.gallery.classList.remove('hidden');
       return;
     }
-    const loadGallery = renderImages(data.hits);
-    refs.gallery.insertAdjacentHTML('beforeend', loadGallery);
-    refs.loader.classList.add('hidden');
-    refs.loadMore.classList.remove('hidden');
 
-    if (currentPage >= totalPages) {
-      refs.loader.classList.add('hidden');
-      refs.loadMore.classList.add('hidden');
+    const markup = renderImages(data.hits);
+    refs.gallery.innerHTML = markup;
+    simpleLightbox.refresh();
+
+    if (currentPage < totalPages) {
+      toggleLoadMoreBtn(true);
+    } else {
       iziToast.info({
         position: 'topRight',
         message: "We're sorry, but you've reached the end of search results.",
+        closeOnClick: true,
       });
     }
-
-    refs.loadMore.addEventListener('click', onLoadMoreBtnClick);
-    simpleLightbox.refresh();
   } catch (error) {
     iziToast.error({
       message: `Error: ${error.message}`,
@@ -124,7 +92,46 @@ refs.form.addEventListener('submit', async e => {
       closeOnClick: true,
     });
   } finally {
-    refs.loader.classList.add('hidden');
-    refs.gallery.classList.remove('hidden');
+    toggleLoader(false);
+    form.reset();
   }
-});
+};
+
+const onLoadMoreBtnClick = async () => {
+  currentPage++;
+  toggleLoader(true);
+  toggleLoadMoreBtn(false);
+
+  try {
+    const data = await fetchImages(currentInputValue, currentPage, limit);
+    const totalPages = Math.ceil(data.totalHits / limit);
+
+    const markup = renderImages(data.hits);
+    refs.gallery.insertAdjacentHTML('beforeend', markup);
+
+    simpleLightbox.refresh();
+    smoothScroll();
+
+    if (currentPage < totalPages) {
+      toggleLoadMoreBtn(true);
+    } else {
+      toggleLoadMoreBtn(false);
+      iziToast.info({
+        position: 'topRight',
+        message: "We're sorry, but you've reached the end of search results.",
+        closeOnClick: true,
+      });
+    }
+  } catch (error) {
+    iziToast.error({
+      message: `Error: ${error.message}`,
+      position: 'topRight',
+      closeOnClick: true,
+    });
+  } finally {
+    toggleLoader(false);
+  }
+};
+
+refs.form.addEventListener('submit', onFormSubmit);
+refs.loadMore.addEventListener('click', onLoadMoreBtnClick);
